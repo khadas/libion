@@ -143,6 +143,25 @@ unsigned long ion_mem_alloc(int ion_fd, size_t size, IONMEM_AllocParams *params,
     return ret;
 }
 
+int ion_mem_sync_cache(int ion_fd, int shared_fd)
+{
+    int legacy_ion = 0;
+
+    legacy_ion = ion_is_legacy(ion_fd);
+    if (!legacy_ion)
+        return 0;
+    if (ion_fd >= 0 && shared_fd >= 0) {
+        if (ion_sync_fd(ion_fd, shared_fd)) {
+            __E("ion_mem_sync_cache err!\n");
+            return -1;
+        }
+    } else {
+        __E("ion_mem_sync_cache err!\n");
+        return -1;
+    }
+    return 0;
+}
+
 int ion_mem_invalid_cache(int ion_fd, int shared_fd)
 {
     int legacy_ion = 0;
