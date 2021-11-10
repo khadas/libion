@@ -18,11 +18,11 @@ all: $(LIBION) $(IONTEST)
 	$(CC) -c -fPIC  $(CFLAGS) $^ -o $@
 
 $(LIBION): $(LIBION_OBJ)
-	$(CC) -shared -fPIC $(CFLAGS) $^ -o $(LIBION)
+	$(CC) -shared  -Wl,-soname,$(LIBION) -fPIC $(CFLAGS) $^ -o $(LIBION)
 
 $(IONTEST): $(IONTEST_OBJ) $(LIBION)
 	$(CC) $^ $(CFLAGS)  -o $@
 
 clean:
-	rm -f $(OBJ)
+	rm -f $(LIBION_OBJ) $(LIBION) $(IONTEST_OBJ) $(IONTEST)
 
