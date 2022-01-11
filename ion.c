@@ -57,23 +57,25 @@ static int get_kernel_version(void)
     if (fd < 0) {
         ALOGE("%s open failed\n", VERSION_FILE);
         return -1;
+    } else {
+        ret = read(fd, version_str, 128);
+        if (ret < 0) {
+            close(fd);
+            ALOGE("%s read failed\n", VERSION_FILE);
+            return -1;
+        }
     }
-    ret = read(fd, version_str, 128);
-    if (ret < 0) {
-        ALOGE("%s read failed\n", VERSION_FILE);
-        return -1;
-    }
-
-    close(fd);
 
     ret = sscanf((const char *)version_str,
                     "Linux version %d.%d.%d", &version,
                     &patchlevel, &sublevel);
     if (ret != 3) {
+        close(fd);
         ALOGE("sscanf error\n");
         return -1;
     }
 
+    close(fd);
     return KERNEL_VERSION(version, patchlevel, sublevel);
 }
 

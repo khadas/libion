@@ -48,42 +48,46 @@ int _ionmem_alloc_test(void)
     if (ion_fd < 0) {
         printf("ion_mem_init failed\n");
         return ion_fd;
+    } else {
+        ret = ion_mem_alloc(ion_fd, len, &params, alloc_flags);
+        ion_close(ion_fd);
+        if (ret)
+            printf("%s failed: %s\n", __func__, strerror(ret));
+        else
+            printf("%s: passed\n", __func__);
+        return ret;
     }
-    ret = ion_mem_alloc(ion_fd, len, &params, alloc_flags);
-    if (ret)
-        printf("%s failed: %s\n", __func__, strerror(ret));
-    else
-        printf("%s: passed\n", __func__);
-    return ret;
 }
 
-int _ion_alloc_test(int *fd, ion_user_handle_t *handle)
+int _ion_alloc_test(int fd, ion_user_handle_t *handle)
 {
     int ret;
     int legacy_ion = 0;
 
-    *fd = ion_open();
-    if (*fd < 0)
-        return *fd;
+    fd = ion_open();
+    if (fd < 0)
+        return fd;
 
-    legacy_ion = ion_is_legacy(*fd);
+    legacy_ion = ion_is_legacy(fd);
     printf("legacy_ion=%d\n", legacy_ion);
     if (legacy_ion)
-        ret = ion_alloc(*fd, len, align, heap_mask, alloc_flags, handle);
+        ret = ion_alloc(fd, len, align, heap_mask, alloc_flags, handle);
     else
-        ret = ion_alloc_fd(*fd, len, align, heap_mask, alloc_flags, handle);
+        ret = ion_alloc_fd(fd, len, align, heap_mask, alloc_flags, handle);
 
-    if (ret)
-        printf("%s failed: %s\n", __func__, strerror(ret));
+    ion_close(fd);
+    if (ret < 0)
+        printf("failed alloc dma buffer\n");
     return ret;
 }
 
 void ion_alloc_test()
 {
-    int fd, ret = 0;
+    int fd = 0;
+    int ret = 0;
     ion_user_handle_t handle;
 
-    if (_ion_alloc_test(&fd, &handle))
+    if (_ion_alloc_test(fd, &handle))
         return;
 
     if (ion_is_legacy(fd))
@@ -92,23 +96,27 @@ void ion_alloc_test()
         printf("%s failed: %s %d\n", __func__, strerror(ret), handle);
         return;
     }
+
     ion_close(fd);
     printf("ion alloc test: passed\n");
 }
 
 void ion_map_test()
 {
-    int fd, map_fd, ret;
+    int fd = 0;
+    int map_fd, ret;
     size_t i;
     ion_user_handle_t handle;
     unsigned char *ptr;
 
-    if (_ion_alloc_test(&fd, &handle))
+    if (_ion_alloc_test(fd, &handle))
         return;
 
     ret = ion_map(fd, handle, len, prot, map_flags, 0, &ptr, &map_fd);
-    if (ret)
+    if (ret) {
+        munmap(ptr, len);
         return;
+    }
 
     for (i = 0; i < len; i++) {
         ptr[i] = (unsigned char)i;
@@ -122,9 +130,6 @@ void ion_map_test()
     ion_close(fd);
     munmap(ptr, len);
     close(map_fd);
-
-    _ion_alloc_test(&fd, &handle);
-    close(fd);
 
 #if 0
     munmap(ptr, len);
@@ -159,16 +164,18 @@ void ion_share_test()
         };
 
         struct cmsghdr *cmsg;
-        int fd, share_fd, ret;
+        int fd = 0;
+        int share_fd, ret;
         char *ptr;
         /* parent */
-        if (_ion_alloc_test(&fd, &handle))
+        if (_ion_alloc_test(fd, &handle))
             return;
         ret = ion_share(fd, handle, &share_fd);
         if (ret)
             printf("share failed %s\n", strerror(errno));
         ptr = mmap(NULL, len, prot, map_flags, share_fd, 0);
         if (ptr == MAP_FAILED) {
+            close(fd);
             return;
         }
         strcpy(ptr, "master");
@@ -180,13 +187,15 @@ void ion_share_test()
         /* send the fd */
         printf("master? [%10s] should be [master]\n", ptr);
         printf("master sending msg 1\n");
-        sendmsg(sd[0], &msg, 0);
+        if (sendmsg(sd[0], &msg, 0) < 0)
+            perror("master send msg 2");
         if (recvmsg(sd[0], &msg, 0) < 0)
             perror("master recv msg 2");
         printf("master? [%10s] should be [child]\n", ptr);
 
         /* send ping */
-        sendmsg(sd[0], &msg, 0);
+        if (sendmsg(sd[0], &msg, 0) < 0)
+            perror("master send msg 1");
         printf("master->master? [%10s]\n", ptr);
         if (recvmsg(sd[0], &msg, 0) < 0)
             perror("master recv 1");
@@ -224,15 +233,20 @@ void ion_share_test()
         }
         printf("child %d\n", recv_fd);
         fd = ion_open();
+        if (fd < 0)
+            return fd;
         ptr = mmap(NULL, len, prot, map_flags, recv_fd, 0);
         if (ptr == MAP_FAILED) {
+            close(fd);
             return;
         }
         printf("child? [%10s] should be [master]\n", ptr);
         strcpy(ptr, "child");
         printf("child sending msg 2\n");
-        sendmsg(sd[1], &child_msg, 0);
+        if (sendmsg(sd[1], &child_msg, 0) < 0)
+            perror("master send msg 2");
         close(fd);
+        _exit(0);
     }
 }
 

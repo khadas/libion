@@ -36,7 +36,7 @@ int ion_mem_init(void)
     ion_fd = ion_open();
 
     if (ion_fd < 0) {
-        __E("%s failed: '%s'\n", strerror(errno));
+        __E("%s failed: '%s'\n", __func__, strerror(errno));
         return -1;
     }
     __D("%s, ion_fd=%d\n", __func__, ion_fd);
@@ -46,41 +46,54 @@ int ion_mem_init(void)
 
 int ion_mem_alloc_fd(int ion_fd, size_t size, IONMEM_AllocParams *params, unsigned int flag, unsigned int alloc_hmask)
 {
-    int ret = -1;
-    int i = 0, num_heaps = 0;
+    int ret = 0;
+    int num_heaps = 0;
     unsigned int heap_mask = 0;
 
-    if (ion_query_heap_cnt(ion_fd, &num_heaps) >= 0) {
-        __D("num_heaps=%d\n", num_heaps);
-        struct ion_heap_data *const heaps = (struct ion_heap_data *)malloc(num_heaps * sizeof(struct ion_heap_data));
-        if (heaps != NULL && num_heaps) {
-            if (ion_query_get_heaps(ion_fd, num_heaps, heaps) >= 0) {
-                for (int i = 0; i != num_heaps; ++i) {
-                    __D("heaps[%d].type=%d, heap_id=%d\n", i, heaps[i].type, heaps[i].heap_id);
-                    if ((1 << heaps[i].type) == alloc_hmask) {
-                        heap_mask = 1 << heaps[i].heap_id;
-                        __D("%d, m=%x, 1<<heap_id=%x, heap_mask=%x, name=%s, alloc_hmask=%x\n",
-                            heaps[i].type, 1<<heaps[i].type, heaps[i].heap_id, heap_mask, heaps[i].name, alloc_hmask);
-                        break;
-                    }
-                }
-            }
-            free(heaps);
-            if (heap_mask)
-                ret = ion_alloc_fd(ion_fd, size, 0, heap_mask, flag, &params->mImageFd);
-            else
-                __E("don't find match heap!!\n");
-        } else {
-            __E("heaps is NULL or no heaps,num_heaps=%d\n", num_heaps);
-        }
-    } else {
-        __E("query_heap_cnt fail! no ion heaps for alloc!!!\n");
+    ret = ion_query_heap_cnt(ion_fd, &num_heaps);
+    if (ret < 0) {
+        __E("ion_query_heap_cnt fail! no ion heaps for alloc!!!\n");
+        return -ENOMEM;
     }
+
+    __D("num_heaps=%d\n", num_heaps);
+    struct ion_heap_data *const heaps = (struct ion_heap_data *)malloc(num_heaps * sizeof(struct ion_heap_data));
+    if (num_heaps <= 0 || heaps == NULL) {
+        free(heaps);
+        __E("heaps is NULL or no heaps,num_heaps=%d\n", num_heaps);
+        return -ENOMEM;
+    }
+
+    ret = ion_query_get_heaps(ion_fd, num_heaps, heaps);
+    if (ret < 0) {
+        free(heaps);
+        __E("ion_query_get_heaps fail! no ion heaps for alloc!!!\n");
+        return -ENOMEM;
+    }
+
+    for (int i = 0; i != num_heaps; ++i) {
+        __D("heaps[%d].type=%d, heap_id=%d\n", i, heaps[i].type, heaps[i].heap_id);
+        if ((1 << heaps[i].type) == alloc_hmask) {
+            heap_mask = 1 << heaps[i].heap_id;
+            __D("%d, m=%x, 1<<heap_id=%x, heap_mask=%x, name=%s, alloc_hmask=%x\n",
+                 heaps[i].type, 1<<heaps[i].type, heaps[i].heap_id, heap_mask, heaps[i].name, alloc_hmask);
+            break;
+        }
+    }
+
+    free(heaps);
+    if (heap_mask == 0) {
+        __E("don't find match heap!!\n");
+        return -ENOMEM;
+    }
+
+    ret = ion_alloc_fd(ion_fd, size, 0, heap_mask, flag, &params->mImageFd);
     if (ret < 0) {
         __E("ion_alloc failed, errno=%d\n", errno);
         return -ENOMEM;
     }
-    return ret;
+
+    return 0;
 }
 
 unsigned long ion_mem_alloc(int ion_fd, size_t size, IONMEM_AllocParams *params, bool cache_flag)
@@ -189,7 +202,7 @@ void ion_mem_exit(int ion_fd)
 
     ret = ion_close(ion_fd);
     if (ret < 0) {
-        __E("%s err (%s)! ion_fd=%d\n", strerror(errno), ion_fd);
+        __E("%s err (%s)! ion_fd=%d\n", __func__, strerror(errno), ion_fd);
         return;
     }
 }
