@@ -1,6 +1,7 @@
 #
 ## makefile for libion and iontest
 #
+OUT_DIR ?= .
 LIBION_OBJ = ion.o IONmem.o
 CFLAGS += -I ./include/
 CFLAGS += -I ./kernel-headers/
@@ -15,14 +16,13 @@ IONTEST = iontest
 all: $(LIBION) $(IONTEST)
 
 %.o: %.c
-	$(CC) -c -fPIC  $(CFLAGS) $^ -o $@
+	$(CC) -c -fPIC  $(CFLAGS) $^ -o $(OUT_DIR)/$@
 
 $(LIBION): $(LIBION_OBJ)
-	$(CC) -shared  -Wl,-soname,$(LIBION) -fPIC $(CFLAGS) $^ -o $(LIBION)
+	$(CC) -shared  -Wl,-soname,$(LIBION) -fPIC $(CFLAGS) $(patsubst %, $(OUT_DIR)/%, $^) -o $(OUT_DIR)/$(LIBION)
 
 $(IONTEST): $(IONTEST_OBJ) $(LIBION)
-	$(CC) $^ $(CFLAGS)  -o $@
+	$(CC) $(CFLAGS) $(LDFLAGS) $(patsubst %, $(OUT_DIR)/%, $^) -o $(OUT_DIR)/$@
 
 clean:
-	rm -f $(LIBION_OBJ) $(LIBION) $(IONTEST_OBJ) $(IONTEST)
-
+	rm -f $(OUT_DIR)/$(LIBION_OBJ) $(OUT_DIR)/$(LIBION) $(OUT_DIR)/$(IONTEST_OBJ) $(OUT_DIR)/$(IONTEST)
